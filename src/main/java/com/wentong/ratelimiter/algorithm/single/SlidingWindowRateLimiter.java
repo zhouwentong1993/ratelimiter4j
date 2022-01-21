@@ -14,7 +14,7 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * 滑动窗口限流
  */
-public class SlidingWindowRateLimiter<T> implements RateLimiter {
+public class SlidingWindowRateLimiter implements RateLimiter {
 
     private final int qps;
     private final int sampleCount;
@@ -48,13 +48,18 @@ public class SlidingWindowRateLimiter<T> implements RateLimiter {
             if (oldBucket == null) {
                 BucketWrap newBucket = new BucketWrap(bucketStartTime, new LongAdder());
                 newBucket.setBucketStartTime(bucketStartTime);
-                array.compareAndSet(index, null, newBucket);
-                return newBucket;
+                if (array.compareAndSet(index, null, newBucket)) {
+                    return newBucket;
+                } else {
+                    Thread.yield();
+                }
             } else if (oldBucket.getBucketStartTime() < bucketStartTime) {
                 if (lock.tryLock()) {
-                    BucketWrap newBucket = new BucketWrap(bucketStartTime, new LongAdder());
-                    array.compareAndSet(index, oldBucket, newBucket);
-                    return newBucket;
+                    try {
+                        resetBucket(oldBucket, bucketStartTime);
+                    } finally {
+                        lock.unlock();
+                    }
                 } else {
                     Thread.yield();
                 }
@@ -66,10 +71,42 @@ public class SlidingWindowRateLimiter<T> implements RateLimiter {
         }
     }
 
+    private int sum(long timeInMills) {
+        int sum = 0;
+        for (int i = 0; i < array.length(); i++) {
+            BucketWrap bucketWrap = array.get(i);
+            if (validBucket(bucketWrap, timeInMills)) {
+                sum += bucketWrap.count.sum();
+            }
+        }
+        return sum;
+    }
+
+    private boolean validBucket(BucketWrap bucketWrap, long timeInMills) {
+        return bucketWrap != null && (timeInMills - bucketWrap.bucketStartTime) > (totalTimeInMills / sampleCount);
+    }
+
+    private void resetBucket(BucketWrap bucketWrap, long startTime) {
+        bucketWrap.count.reset();
+        bucketWrap.bucketStartTime = startTime;
+    }
+
+    private void add(long timeInMills) {
+        BucketWrap bucketWrap = currentBuck(timeInMills);
+        bucketWrap.count.add(1);
+    }
+
 
     @Override
     public boolean tryAcquire() throws InternalErrorException {
-        return false;
+        long now = System.currentTimeMillis();
+        int sum = sum(now);
+        if (sum + 1 < qps) {
+            add(now);
+            return true;
+        } else {
+            return false;
+        }
     }
 
     @Data

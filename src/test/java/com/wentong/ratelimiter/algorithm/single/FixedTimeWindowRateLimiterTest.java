@@ -1,9 +1,9 @@
-package com.wentong.ratelimiter.algorithm;
+package com.wentong.ratelimiter.algorithm.single;
 
-import com.wentong.ratelimiter.algorithm.single.FixedTimeWindowRateLimiter;
-import com.wentong.ratelimiter.exception.InternalErrorException;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Ticker;
+import com.wentong.ratelimiter.algorithm.RateLimiter;
+import com.wentong.ratelimiter.exception.InternalErrorException;
 import org.mockito.Mockito;
 import org.testng.annotations.Test;
 
