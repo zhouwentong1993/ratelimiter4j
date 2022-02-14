@@ -66,7 +66,7 @@ public class SlidingWindowRateLimiter implements RateLimiter {
             } else if (oldBucket.getBucketStartTime() == bucketStartTime) {
                 return oldBucket;
             } else {
-                throw new IllegalArgumentException("can't happens");
+                throw new IllegalArgumentException("Can't happens");
             }
         }
     }

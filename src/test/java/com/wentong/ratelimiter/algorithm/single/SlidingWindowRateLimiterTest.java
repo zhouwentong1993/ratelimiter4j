@@ -1,14 +1,16 @@
 package com.wentong.ratelimiter.algorithm.single;
 
-import com.google.common.base.Stopwatch;
 import com.google.common.base.Ticker;
 import com.wentong.ratelimiter.algorithm.RateLimiter;
+import com.wentong.ratelimiter.exception.InternalErrorException;
 import org.mockito.Mockito;
 import org.testng.annotations.Test;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.mockito.Mockito.when;
-import static org.testng.Assert.assertFalse;
-import static org.testng.Assert.assertTrue;
+import static org.testng.Assert.*;
 
 public class SlidingWindowRateLimiterTest {
 
@@ -47,6 +49,42 @@ public class SlidingWindowRateLimiterTest {
         assertTrue(passed7);
 
         SlidingWindowRateLimiter limiter = new SlidingWindowRateLimiter(10);
+
+    }
+
+    @Test
+    public void multiThread() throws Exception {
+        SlidingWindowRateLimiter limiter = new SlidingWindowRateLimiter(10000);
+
+        int threadCount = 150;
+        int runPerThread = 100;
+        AtomicInteger acquireCount = new AtomicInteger(0);
+        AtomicInteger unAcquireCount = new AtomicInteger(0);
+
+        CountDownLatch startLatch = new CountDownLatch(threadCount);
+        CountDownLatch endLatch = new CountDownLatch(threadCount);
+
+        for (int i = 0; i < threadCount; i++) {
+            new Thread(() -> {
+                startLatch.countDown();
+                for (int j = 0; j < runPerThread; j++) {
+                    try {
+                        if (limiter.tryAcquire()) {
+                            acquireCount.incrementAndGet();
+                        } else {
+                            unAcquireCount.incrementAndGet();
+                        }
+                    } catch (InternalErrorException e) {
+                        e.printStackTrace();
+                    }
+                }
+                endLatch.countDown();
+            }, "Thread:" + i).start();
+        }
+        startLatch.await();
+        endLatch.await();
+        assertEquals(10000, acquireCount.intValue());
+        assertEquals(5000, unAcquireCount.intValue());
 
     }
 }
